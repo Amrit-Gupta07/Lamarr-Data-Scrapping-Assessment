@@ -1,0 +1,63 @@
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import Select
+from selenium.webdriver.common.keys import Keys
+import pandas as pd
+import time
+from bs4 import BeautifulSoup
+
+
+website = 'https://cestat.gov.in/casestatus'
+path = r"C:\Users\dpsvn\Downloads\chromedriver-win64\chromedriver\chromedriver.exe"
+options = webdriver.ChromeOptions()
+options.add_experimental_option("detach",True)
+service = Service(executable_path=path)
+driver = webdriver.Chrome(service = service,options=options)
+driver.get(website)
+
+dropdown = Select(driver.find_element(By.NAME, 'app_type'))
+dropdown.select_by_value('pno')
+
+time.sleep(2)
+
+# Find the search input box for "Party Name" and enter "Gupta"
+search_box = driver.find_element(By.ID, '1')
+search_box.send_keys('Gupta')
+
+search_button = driver.find_element(By.NAME, 'button3')
+search_button.click()
+
+time.sleep(2)
+
+entries = driver. find_elements(By.TAG_NAME, 'th')
+
+data_heading = []
+for entry in entries:
+    data_heading.append(entry.text)
+    print(entry.text)
+
+print(data_heading)
+
+soup = BeautifulSoup(driver.page_source, 'html.parser')
+
+
+table = soup.find('table', id='example')
+
+
+headers = [header.text.strip() for header in table.find_all('th')]
+
+# Extract rows
+rows = []
+for row in table.find_all('tr')[1:]:  # Skip the header row
+    cells = row.find_all('td')
+    rows.append([cell.text.strip() for cell in cells])
+
+# Create a DataFrame to store the data
+cases_df = pd.DataFrame(rows, columns=headers)
+
+# Save the DataFrame to a CSV file
+cases_df.to_csv('cases.csv', index=False)
+
+print('Scraping complete. Data saved to cases.csv.')
+

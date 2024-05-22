@@ -1,0 +1,102 @@
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import Select
+import pandas as pd
+import time
+from bs4 import BeautifulSoup
+import os
+
+
+website = 'https://cestat.gov.in/casestatus'
+path = r"C:\Users\dpsvn\Downloads\chromedriver-win64\chromedriver\chromedriver.exe"
+options = webdriver.ChromeOptions()
+options.add_experimental_option("detach", True)
+service = Service(executable_path=path)
+driver = webdriver.Chrome(service=service, options=options)
+driver.get(website)
+
+
+dropdown = Select(driver.find_element(By.NAME, 'app_type'))
+dropdown.select_by_value('pno')
+time.sleep(2)
+
+search_box = driver.find_element(By.ID, '1')
+search_box.send_keys('Gupta')
+
+search_button = driver.find_element(By.NAME, 'button3')
+search_button.click()
+time.sleep(2)
+
+
+soup = BeautifulSoup(driver.page_source, 'html.parser')
+table = soup.find('table', id='example')
+
+action_links = []
+for row in table.find_all('tr')[1:]: 
+    action_cell = row.find_all('td')[-1]  
+    action_link = action_cell.find('a')['href']
+    action_links.append(action_link)
+
+
+def safe_extract_text(soup, label):
+    element = soup.find('td', string=label)
+    if element:
+        sibling = element.find_next_sibling('td')
+        if sibling:
+            return sibling.text.strip()
+    return None 
+
+
+data = []
+for link in action_links:
+    driver.get(link)
+    time.sleep(2)  # Allow the page to load
+    
+    detail_soup = BeautifulSoup(driver.page_source, 'html.parser')
+    
+    # Scrape the required data from the detail page (first table)
+    case_detail = {}
+    case_detail['Diary no/Year'] = safe_extract_text(detail_soup, 'Diary no/Year')
+    case_detail['Case Type/Case No/Year'] = safe_extract_text(detail_soup, 'Case Type/Case No/Year')
+    case_detail['Date of Filing'] = safe_extract_text(detail_soup, 'Date of Filing')
+    case_detail['Case Status'] = safe_extract_text(detail_soup, 'Case Status')
+    case_detail['Impugn Type'] = safe_extract_text(detail_soup, 'Impugn Type')
+    case_detail['Impugn Number'] = safe_extract_text(detail_soup, 'Impugn Number')
+    case_detail['Impugn Date'] = safe_extract_text(detail_soup, 'Impugn Date')
+
+    # Scrape the required data from the detail page (second table)
+    case_detail['Next Hearing Date'] = safe_extract_text(detail_soup, 'Next Hearing Date')
+    case_detail['Bench type'] = safe_extract_text(detail_soup, 'Bench type')
+    case_detail['Bench'] = safe_extract_text(detail_soup, 'Bench')
+    case_detail['Final Order Date'] = safe_extract_text(detail_soup, 'Final Order Date')
+    case_detail['Final Order No.'] = safe_extract_text(detail_soup, 'Final Order No.')
+    case_detail['Disposal Nature'] = safe_extract_text(detail_soup, 'Disposal Nature')
+    case_detail['Previous Hearing Date'] = safe_extract_text(detail_soup, 'Previous Hearing Date')
+    case_detail['Next Hearing Purpose'] = safe_extract_text(detail_soup, 'Next Hearing Purpose')
+    case_detail['Last Action In Court'] = safe_extract_text(detail_soup, 'Last Action In Court')
+
+    # Scrape the required data from the detail page (third table)
+    case_detail['Petitioner Name'] = safe_extract_text(detail_soup, 'Petitioner Name')
+    case_detail['Petitioner Advocate'] = safe_extract_text(detail_soup, 'Petitioner Advocate')
+    case_detail['Respondent Name'] = safe_extract_text(detail_soup, 'Respondent Name')
+    case_detail['Respondent Advocate'] = safe_extract_text(detail_soup, 'Respondent Advocate')
+    
+    data.append(case_detail)
+
+
+cases_df = pd.DataFrame(data)
+
+# Clean up date formatting
+date_columns = ['Date of Filing', 'Impugn Date', 'Next Hearing Date', 'Final Order Date', 'Previous Hearing Date']
+for col in date_columns:
+    cases_df[col] = pd.to_datetime(cases_df[col], errors='coerce').dt.strftime('%Y-%m-%d')
+
+# Define the file path
+file_path = os.path.join(os.path.expanduser("~"), "Desktop", "detailed_cases.csv")
+
+
+cases_df.to_csv(file_path, index=False)
+
+print(f'Scraping complete. Data saved to {file_path}')
+
